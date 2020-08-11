@@ -1,0 +1,153 @@
+---
+title: "Dividend Analysis"
+author: "Matthew Dempsey"
+output:
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#Packages
+library(tidyverse)
+library(tidyquant)
+library(riingo)
+library(ggrepel)
+library(TTR)
+
+#TIINGO.COM API Token
+riingo_set_token("your_api_token_here")
+
+```
+
+## Get Data
+
+First 
+```{r cars}
+#Index Data 
+#dow <- tq_index("DOW")
+#gdow <- tq_index("DOWGLOBAL")
+#sp_400 <- tq_index("SP400")
+sp_500 <- tq_index("SP500") 
+#sp_600 <- tq_index("SP600")
+
+#Exchange Data: Currently not useable due to data source becoming unscrapable
+#https://github.com/business-science/tidyquant/issues/177
+nyse <- tq_exchange("NYSE")
+
+head(sp_500)
+dim(sp_500)
+
+test_tickers <- 
+  supported_tickers() %>% 
+  select(ticker) %>% 
+  pull()
+
+```
+
+## Clean Data
+
+```{r data}
+tickers <-
+  sp_500 %>% 
+  arrange(desc(weight)) %>%
+  slice(1:30) %>% 
+  filter(symbol %in% test_tickers) %>% 
+  pull(symbol)
+
+divs_from_riingo <- 
+  tickers %>% 
+  riingo_prices(start_date = "2017-01-01", end_date = "2020-07-31") %>% 
+  arrange(ticker) %>% 
+  mutate(date = ymd(date)) %>%
+  left_join(sp_500, by = c("ticker" = "symbol")) %>%
+  select(date, ticker, close, divCash, sector)
+
+```
+
+## Plots
+
+```{r divplots}
+
+divs_from_riingo %>% 
+  group_by(ticker) %>% 
+  filter(divCash > 0) %>%
+  slice(n()) %>% 
+  ggplot(aes(x = date, y = divCash, color = ticker)) + 
+  geom_point() + 
+  geom_label(aes(label = ticker)) +
+  scale_y_continuous(labels = scales::dollar)  +
+  scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
+  labs(x = "", y = "div/share", title = "Most Recent Divs: Top 20 SP 500 companies") +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5))
+
+divs_from_riingo %>% 
+  group_by(ticker) %>% 
+  filter(date > "2017-12-31" & divCash > 0) %>% 
+  slice(n()) %>% 
+  ggplot(aes(x = date, y = divCash, color = ticker)) + 
+  geom_point() + 
+  geom_label(aes(label = ticker)) +
+  scale_y_continuous(labels = scales::dollar)  +
+  scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
+  labs(x = "", y = "div/share", title = "2020/Late 2019 Divs: Top 20 SP 500 companies") +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) 
+
+divs_from_riingo %>% 
+  group_by(ticker) %>% 
+  filter(date > "2018-12-31" & divCash > 0) %>% 
+  mutate(year = year(date)) %>% 
+  group_by(year, ticker) %>% 
+  mutate(div_total = sum(divCash)) %>% 
+  slice(1) %>% 
+  mutate(div_yield = div_total/close) %>% 
+  ggplot(aes(x = date, y = div_yield, color = ticker)) + 
+  geom_point() + 
+  geom_text(aes(label = ticker), vjust = 0, nudge_y = 0.002) +
+  scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 10))  +
+  scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
+  labs(x = "", y = "yield", title = "2018 Div Yield: Top 30 SP 500 companies") +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) 
+
+
+divs_from_riingo %>% 
+  group_by(ticker) %>% 
+  filter(date > "2019-12-31" & divCash > 0) %>% 
+  mutate(year = year(date)) %>% 
+  group_by(year, ticker) %>% 
+  mutate(div_total = sum(divCash)) %>% 
+  slice(1) %>% 
+  mutate(div_yield = div_total/close) %>% 
+  ggplot(aes(x = date, y = div_yield, color = ticker)) + 
+  geom_point() + 
+  geom_text_repel(aes(label = ticker), vjust = 0, nudge_y = 0.002) +
+  scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 10))  +
+  scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
+  labs(x = "", y = "yield", title = "2020 Divs: Top 20 SP 500 companies") +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) 
+
+divs_from_riingo %>% 
+  mutate(year = year(date)) %>% 
+  filter(year > "2017") %>%
+  group_by(year, ticker) %>% 
+  mutate(div_total = sum(divCash)) %>% 
+  slice(1) %>% 
+  arrange(ticker) %>% 
+  select(div_total) %>% 
+  head(10) 
+
+
+divs_total <- 
+  divs_from_riingo %>% 
+  mutate(year = year(date)) %>% 
+  group_by(year, ticker) %>% 
+  mutate(div_total = sum(divCash)) %>% 
+  slice(1) %>% 
+  arrange(ticker) %>% 
+  select(div_total)
+```
+
+

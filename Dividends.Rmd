@@ -15,7 +15,7 @@ library(ggrepel)
 library(TTR)
 
 #TIINGO.COM API Token
-riingo_set_token("85491cdf5317ed91dcb27b4a21eb5d4485a780bf")
+riingo_set_token("your_token")
 
 ```
 

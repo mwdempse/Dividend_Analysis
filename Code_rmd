@@ -15,54 +15,66 @@ library(ggrepel)
 library(TTR)
 
 #TIINGO.COM API Token
-riingo_set_token("your_api_token_here")
+#requires free tiingo account
+riingo_set_token("85491cdf5317ed91dcb27b4a21eb5d4485a780bf")
 
 ```
 
 ## Get Data
 
-First 
-```{r cars}
+ 
+```{r obtain_data}
 #Index Data 
+sp_500 <- tq_index("SP500")
+## Other possible indexies for analysis 
 #dow <- tq_index("DOW")
 #gdow <- tq_index("DOWGLOBAL")
 #sp_400 <- tq_index("SP400")
-sp_500 <- tq_index("SP500") 
 #sp_600 <- tq_index("SP600")
-
-#Exchange Data: Currently not useable due to data source becoming unscrapable
-#https://github.com/business-science/tidyquant/issues/177
-nyse <- tq_exchange("NYSE")
+#Exchange Data
+#nyse <- tq_exchange("NYSE")
 
 head(sp_500)
 dim(sp_500)
 
+# Filter for Tiingo API supported tickers
 test_tickers <- 
   supported_tickers() %>% 
   select(ticker) %>% 
   pull()
-
 ```
+
+Exchange data is currently not easily available because data source, old.nasdaq.com, becoming unscrapable due to swapping to Java.  [Link to issue](https://github.com/business-science/tidyquant/issues/177)
+
+Currently looking for a workaround that is more scaleable than manually downloading the data from sources below:
+
+[NASDAQ](https://old.nasdaq.com/screening/companies-by-name.aspx?letter=0&exchange=NASDAQ&render=download)   [AMEX](https://old.nasdaq.com/screening/companies-by-name.aspx?letter=0&exchange=AMEX&render=download)   [NYSE](https://old.nasdaq.com/screening/companies-by-name.aspx?letter=0&exchange=NYSE&render=download)
 
 ## Clean Data
 
-```{r data}
+```{r clean_data}
+# Select supported tickers
 tickers <-
   sp_500 %>% 
   arrange(desc(weight)) %>%
+  #Selecting top 30 for speed code works with full S&P500 but it takes a while to run
   slice(1:30) %>% 
   filter(symbol %in% test_tickers) %>% 
   pull(symbol)
-
+  
+# Select daily stock information from dividend stocks between 2018 and September 30, 2020
+# Dates are Year-Month-Day 
 divs_from_riingo <- 
   tickers %>% 
-  riingo_prices(start_date = "2017-01-01", end_date = "2020-07-31") %>% 
+  riingo_prices(start_date = "2017-01-01", end_date = "2020-09-30") %>% 
   arrange(ticker) %>% 
   mutate(date = ymd(date)) %>%
   left_join(sp_500, by = c("ticker" = "symbol")) %>%
   select(date, ticker, close, divCash, sector)
-
+  
+head(divs_from_riingo)
 ```
+
 
 ## Plots
 
@@ -80,37 +92,28 @@ divs_from_riingo %>%
   labs(x = "", y = "div/share", title = "Most Recent Divs: Top 20 SP 500 companies") +
   theme(legend.position = "none",
         plot.title = element_text(hjust = 0.5))
+```
 
+
+```{r divplots2}
 divs_from_riingo %>% 
   group_by(ticker) %>% 
-  filter(date > "2017-12-31" & divCash > 0) %>% 
+  filter(date > "2019-12-31" & divCash > 0) %>% 
   slice(n()) %>% 
   ggplot(aes(x = date, y = divCash, color = ticker)) + 
   geom_point() + 
   geom_label(aes(label = ticker)) +
   scale_y_continuous(labels = scales::dollar)  +
   scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
-  labs(x = "", y = "div/share", title = "2020/Late 2019 Divs: Top 20 SP 500 companies") +
+  labs(x = "", y = "div/share", title = "2020 Divs: Top 20 SP 500 companies") +
   theme(legend.position = "none",
         plot.title = element_text(hjust = 0.5)) 
+```
 
-divs_from_riingo %>% 
-  group_by(ticker) %>% 
-  filter(date > "2018-12-31" & divCash > 0) %>% 
-  mutate(year = year(date)) %>% 
-  group_by(year, ticker) %>% 
-  mutate(div_total = sum(divCash)) %>% 
-  slice(1) %>% 
-  mutate(div_yield = div_total/close) %>% 
-  ggplot(aes(x = date, y = div_yield, color = ticker)) + 
-  geom_point() + 
-  geom_text(aes(label = ticker), vjust = 0, nudge_y = 0.002) +
-  scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 10))  +
-  scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
-  labs(x = "", y = "yield", title = "2018 Div Yield: Top 30 SP 500 companies") +
-  theme(legend.position = "none",
-        plot.title = element_text(hjust = 0.5)) 
+Above chart is alright however labels are overlaping causing the graph to look cluttered.
 
+```{r divplots3}
+# Remove "box" around stock tickers to decluter chart and change bottom scale to remove clutter
 
 divs_from_riingo %>% 
   group_by(ticker) %>% 
@@ -124,10 +127,32 @@ divs_from_riingo %>%
   geom_point() + 
   geom_text_repel(aes(label = ticker), vjust = 0, nudge_y = 0.002) +
   scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 10))  +
-  scale_x_date(breaks = scales::pretty_breaks(n = 10)) +
+  scale_x_date(breaks = scales::pretty_breaks(n = 6)) +
   labs(x = "", y = "yield", title = "2020 Divs: Top 20 SP 500 companies") +
   theme(legend.position = "none",
         plot.title = element_text(hjust = 0.5)) 
+
+# Change metric to yeild  
+
+divs_from_riingo %>% 
+  group_by(ticker) %>% 
+  filter(date > "2019-12-31" & divCash > 0) %>% 
+  mutate(year = year(date)) %>% 
+  group_by(year, ticker) %>% 
+  mutate(div_total = sum(divCash)) %>% 
+  slice(1) %>% 
+  mutate(div_yield = div_total/close) %>% 
+  ggplot(aes(x = date, y = div_yield, color = ticker)) + 
+  geom_point() + 
+  geom_text(aes(label = ticker), vjust = 0, nudge_y = 0.002) +
+  scale_y_continuous(labels = scales::percent, breaks = scales::pretty_breaks(n = 10))  +
+  scale_x_date(breaks = scales::pretty_breaks(n = 6)) +
+  labs(x = "", y = "yield", title = "2020 Div Yield: Top 20 SP 500 companies") +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5)) 
+
+
+
 
 divs_from_riingo %>% 
   mutate(year = year(date)) %>% 
@@ -139,7 +164,7 @@ divs_from_riingo %>%
   select(div_total) %>% 
   head(10) 
 
-
+# Save above object
 divs_total <- 
   divs_from_riingo %>% 
   mutate(year = year(date)) %>% 
